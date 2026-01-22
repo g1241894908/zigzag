@@ -153,7 +153,7 @@ def get_onnx_tensor_type(name: str, model: ModelProto):
     for input_value in model.graph.input:
         if input_value.name == name:
             return OnnxTensorType.from_tensor_type(input_value.type.tensor_type, OnnxTensorCategory.INPUT)
-
+        
     for output in model.graph.output:
         if output.name == name:
             return OnnxTensorType.from_tensor_type(output.type.tensor_type, OnnxTensorCategory.OUTPUT)

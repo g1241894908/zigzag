@@ -1,16 +1,16 @@
-- id: 0 # conv1 stride 2
-  name: example_name_of_layer0
-  operator_type: Conv
-  equation: O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]
-  dimension_relations: [ix=2*ox+1*fx, iy=2*oy+1*fy]
-  loop_dims: [B, K, C, OY, OX, FY, FX]
+- id: 0 # conv1 stride 2 层编号
+  name: example_name_of_layer0 
+  operator_type: Conv # 和mapping文件里面具体的操作相互映射
+  equation: O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]  #计算 操作数是大写 维度是小写,除了O别的都能随意
+  dimension_relations: [ix=2*ox+1*fx, iy=2*oy+1*fy]  #卷积中才会有的stride
+  loop_dims: [B, K, C, OY, OX, FY, FX]  # 维度列表，去掉有依赖的选项，比如IX IY
   loop_sizes: [1, 64, 3, 112, 112, 7, 7]
   operand_precision:
     W: 8
     I: 8
-    O: 16
-    O_final: 8
-  operand_source:
+    O: 16 # 部分和精度
+    O_final: 8  # 输出精度
+  operand_source: #表达依赖关系，就是说输入的I是来自于那一层的，可能有resnet层
     I: 0
     W: 0
 

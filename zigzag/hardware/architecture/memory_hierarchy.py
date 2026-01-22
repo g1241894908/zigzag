@@ -74,8 +74,8 @@ class MemoryHierarchy(DiGraphWrapper[MemoryLevel]):
 
         # Compute which memory level this is for all the operands
         mem_level_of_operands: dict[MemoryOperand, int] = {}
-        for mem_op in operands:
-            nb_levels_so_far = len([node for node in self.node_list if mem_op in node.operands])
+        for mem_op in operands:  # mem_op = "O" | "W" | "I" 因为一个memory可能有多个操作数
+            nb_levels_so_far = len([node for node in self.node_list if mem_op in node.operands]) #检查目前节点(有向图定义的)上有几个这种类型的操作数
             mem_level_of_operands[mem_op] = nb_levels_so_far
 
         memory_level = MemoryLevel(
@@ -91,7 +91,7 @@ class MemoryHierarchy(DiGraphWrapper[MemoryLevel]):
         self.memory_level_id += 1
 
         # Pre-compute appropriate edges
-        to_edge_from: set[MemoryLevel] = set()
+        to_edge_from: set[MemoryLevel] = set() #准备一个空的集合
         for mem_op in operands:
             # Find top level memories of the operands
             for m in self.get_operator_top_level(mem_op)[0]:

@@ -34,6 +34,10 @@ class TemporalMappingGeneratorStage(Stage):
         self.accelerator = accelerator
         self.layer = layer
         self.spatial_mapping = spatial_mapping
+        #!!这里给到的空间映射是包含3种操作数的4个层级的小数空间映射
+        #!!SpatialMapping({O: [[(FX, 2.3333333333333335)], [(K, 16.0)], [], []], 
+        #!!                W: [[], [(FX, 2.3333333333333335), (K, 16.0)], [], []], 
+        #!!                I: [[(K, 16.0)], [(FX, 2.3333333333333335)], [], []]})
 
     def run(self):
         for temporal_mapping in self.generate_temporal_mappings():
@@ -53,10 +57,10 @@ class TemporalMappingGeneratorStage(Stage):
             spatial_mapping=self.spatial_mapping,
             **self.kwargs,
         )
-
         # Return the full, user-provided temporal mapping
         provided_ordering = self.layer.temporal_ordering
         all_temporal_loops = engine.get_temporal_loops()
+
         if provided_ordering.is_complete(all_temporal_loops):
             allocator = MemoryAllocator(
                 self.accelerator, self.layer, self.spatial_mapping, provided_ordering.to_legacy_format()  # type: ignore
@@ -66,9 +70,9 @@ class TemporalMappingGeneratorStage(Stage):
             return
         else:
             constraints: list[PermutationConstraint] = provided_ordering.get_constraints()
+
             if any(not constr.is_empty() for constr in constraints):
                 engine.set_constraints(constraints)
-
             # Generate from scratch
             for mapping in engine.run():
                 yield mapping

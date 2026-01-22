@@ -107,12 +107,12 @@ class ConvParser(ONNXOperatorParser):
 
     def generate_layer_node_for_conv(self):
         attrs = self.node.attribute
+
         kernel_shape: list[int] = get_attribute_ints_with_name("kernel_shape", attrs, default=None)  # type: ignore
         strides: list[int] = get_attribute_ints_with_name("strides", attrs, default=[1, 1])  # type: ignore
         dilations: list[int] = get_attribute_ints_with_name("dilations", attrs, default=[1, 1])  # type: ignore
         group_size: int = get_attribute_ints_with_name("group", attrs, default=1)  # type: ignore
         padding: list[int] = get_attribute_ints_with_name("pads", attrs, default=[0, 0, 0, 0])  # type: ignore
-
         # Get the input and output activation shapes
         ia_dimension_shape, oa_dimension_shape = get_node_input_output_dimension_shapes(self.node, self.onnx_model)
 
@@ -128,5 +128,4 @@ class ConvParser(ONNXOperatorParser):
         )
         factory = LayerNodeFactory(layer_data, self.mapping_data)
         layer_node = factory.create()
-
         return layer_node

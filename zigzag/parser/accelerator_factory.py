@@ -49,12 +49,11 @@ class AcceleratorFactory:
         """
         name = self.data["name"]
         is_imc = self.data["operational_array"]["is_imc"]
-        operational_array = self.create_operational_array()
-
+        operational_array = self.create_operational_array() #!!读出计算阵列并读出定义的面积和功耗
         mem_graph = MemoryHierarchy(operational_array)
-        dataflows = self.create_dataflows()
+        
+        dataflows = self.create_dataflows() # here return NONE
         shared_mem_group_id = core_id if shared_mem_group_id is None else shared_mem_group_id
-
         for mem_name in self.data["memories"]:
             if len(mem_graph) == 0 and is_imc:
                 cacti_bw_scaling = list(operational_array.dimension_sizes.values())[0]
@@ -95,6 +94,8 @@ class AcceleratorFactory:
         dimension_sizes: dict[OADimension, int] = {
             OADimension(oa_dim): op_array_data["sizes"][i] for i, oa_dim in enumerate(oa_dims)
         }
+        # print( dimension_sizes)
+        # exit()
         return MultiplierArray(multiplier, dimension_sizes)
 
     def create_imc_array(self) -> ImcArray:
@@ -128,6 +129,8 @@ class AcceleratorFactory:
         )
 
     def create_dataflows(self) -> SpatialMapping | None:
+        # print(self.data["dataflows"])
+        # exit()
         if "dataflows" not in self.data:
             return None
         if self.data["dataflows"] is None:
@@ -140,7 +143,6 @@ class AcceleratorFactory:
             oa_dim = OADimension(oa_dim_str)
             mapping_this_oa_dim = self.__create_dataflow_single_oa_dim(unrolling_list)
             spatial_mapping_dict[oa_dim] = mapping_this_oa_dim
-
         return SpatialMapping(spatial_mapping_dict)
 
     def __create_dataflow_single_oa_dim(self, mapping_data: list[str]) -> MappingSingleOADim:
@@ -204,7 +206,6 @@ class MemoryFactory:
         operands: list[MemoryOperand] = [MemoryOperand(x) for x in self.data["operands"]]
         port_allocation = self.create_port_allocation()
         served_dimensions = self.create_served_mem_dimensions()
-
         mem_graph.add_memory(
             memory_instance=instance,
             operands=operands,
@@ -229,6 +230,7 @@ class MemoryFactory:
             }
             for idx, mem_op_str in enumerate(self.data["operands"])
         }
+
         return PortAllocation(data)
 
     def create_default_port_allocation(self) -> PortAllocation:

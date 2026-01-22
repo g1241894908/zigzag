@@ -76,9 +76,10 @@ class SpatialMappingGeneratorStage(Stage):
         self.memory_hierarchy = self.accelerator.memory_hierarchy
 
         # Spatial mapping hint
-        self.spatial_mapping_hint = self.layer.spatial_mapping_hint
+        self.spatial_mapping_hint = self.layer.spatial_mapping_hint #如果没有定义硬件对应计算哪个维度,那就生成所有的可能映射
         self.spatial_mapping_hint.clear_invalid_hits(self.layer.layer_dims)
         self.spatial_mapping_hint.complete_with_defaults(self.oa_dim_sizes, self.layer.layer_dims)
+
 
     def run(self):
         """! Generate SpatialMappings and convert to internal representation"""
@@ -97,7 +98,8 @@ class SpatialMappingGeneratorStage(Stage):
                 generated_mapping,
             )
 
-            # Modify the size of lower input mem to support weight diagonal spatial unrolling (for OX/OY)
+            # Modify the size of lower input mem to support weight diagonal spatial unrolling (for OX/OY) 
+            # #!!针对partial relevance改动，有时间再研究吧
             accelerator_under_test = (
                 self.modify_innermost_input_mem_size(generated_mapping)
                 if self.enable_weight_diagonal_mapping
@@ -114,7 +116,7 @@ class SpatialMappingGeneratorStage(Stage):
             # Set the generated_mapping in the layer, as this is required by SpatialMappingConversionStage
             self.layer.spatial_mapping = generated_mapping
 
-            for cme, extra_info in spatial_mapping_conversion_stage.run():
+            for cme, extra_info in spatial_mapping_conversion_stage.run():    # 针对每个空间mapping生成新的分支去探索之后的队列
                 # recover back the accelerator in case the memory size had been adjusted
                 cme.accelerator = self.accelerator
                 yield cme, (generated_mapping, extra_info)
@@ -123,14 +125,12 @@ class SpatialMappingGeneratorStage(Stage):
         """! Generator that yields SpatialMappings
         # TODO this function first does all the work before it yield the first element
         """
-        max_unrollings = self.get_max_unrolling()
-
+        max_unrollings = self.get_max_unrolling() # 根据register的带宽来D1 D2可用的空间最大循环维度
         # Start from the given mapping
         mapping_template = copy.deepcopy(self.provided_mapping)
         mapping_template.initialize_oa_dims(self.oa_dim_sizes)
         mapping_template.check_and_reduce(max_unrollings, self.layer_dim_sizes.data)
-
-        oa_dims_to_fill = [x for x in self.oa_dim_sizes if x not in mapping_template]
+        oa_dims_to_fill = [x for x in self.oa_dim_sizes if x not in mapping_template] # 检查未在mapping.yaml设定的空间映射
 
         # Full Spatial Mapping is already defined by user
         if len(oa_dims_to_fill) == 0:
@@ -138,33 +138,31 @@ class SpatialMappingGeneratorStage(Stage):
             mapping_template = self.limit_unrolling_to_mem_capacity(mapping_template)
             yield mapping_template
             return
-
         # For each OADimension to fill, create a generator of MappingSingleOADim candidates
         mappings_per_oa_dim: list[Generator[MappingSingleOADim, None, None]] = [
             self.generate_spatial_mapping_single_oa_dim(
-                self.spatial_mapping_hint[oa_dim],
+                self.spatial_mapping_hint[oa_dim],  #这个hint如果没有定义，则会在这里生成所有可能序列
                 max_unrollings[oa_dim],
                 self.oa_dim_sizes[oa_dim],
             )
             for oa_dim in oa_dims_to_fill
         ]
-
         candidate_mappings: list[SpatialMapping] = []
-        for combination in itertools.product(*mappings_per_oa_dim):
+        for combination in itertools.product(*mappings_per_oa_dim): 
+            # 硬件有两个轴:D1和D2,当itertools.product执行时，它会取出D1的一个零件和D2的一个零件进行配对
             # Start from the user-defined mapping
             candidate = mapping_template.copy()
             for idx, oa_dim in enumerate(oa_dims_to_fill):
                 candidate[oa_dim] = combination[idx]
             # Candidate can be invalid if unrollings of LayerDim exceed LayerDim size from workload
-            if candidate.is_valid(max_unrollings, self.layer_dim_sizes.data):
+            if candidate.is_valid(max_unrollings, self.layer_dim_sizes.data):  # 这里要删除两个维度如果刚好都选了K且超过了总的K的循环的情况
                 candidate_mappings.append(candidate)
 
         assert len(candidate_mappings) > 0, "No valid SpatialMappings found"
-
-        # Sort according to expected performance
+        # Sort according to expected performance #论文中提到的穷举有效
         candidate_mappings = sorted(
             candidate_mappings,
-            key=lambda x: x.get_performance_indicator(),
+            key=lambda x: x.get_performance_indicator(), # 匿名函数写法
             reverse=True,
         )
 
@@ -173,7 +171,7 @@ class SpatialMappingGeneratorStage(Stage):
             candidate = candidate_mappings[i]
             if self.enable_weight_diagonal_mapping:
                 candidate = self.add_input_pr_spatial_loop(candidate)
-            candidate = self.limit_unrolling_to_mem_capacity(candidate)
+            candidate = self.limit_unrolling_to_mem_capacity(candidate)  # 为了确保阵列上所用的数据在register中都能存下
             yield candidate
 
     def limit_unrolling_to_mem_bandwidth(
@@ -193,21 +191,20 @@ class SpatialMappingGeneratorStage(Stage):
                     mem_name,
                 )
 
-        for mem_level in self.memory_hierarchy.get_inner_memories():
-            for mem_op in mem_level.operands:
-                layer_op = self.layer.memory_operand_links.mem_to_layer_op(mem_op)
+        for mem_level in self.memory_hierarchy.get_inner_memories(): # 找到最内循环 REG_I1 REG_I2 REG_O
+            for mem_op in mem_level.operands: #可能有多个存储操作数 I1 I2 for REG_I1
+                layer_op = self.layer.memory_operand_links.mem_to_layer_op(mem_op) #I1 -> W
                 # Either write BW (to write outputs away) or read BW (to read inputs)
-                mem_bandwidth = mem_level.write_bw if layer_op.is_output() else mem_level.read_bw
+                mem_bandwidth = mem_level.write_bw if layer_op.is_output() else mem_level.read_bw # W -> read_bw
                 # Bit precision of layer operand
                 precision = self.layer.operand_precision[layer_op]
-                irrelevant_dimensions = self.layer.get_operand_irrelevant_layer_dims(layer_op)
-
-                for oa_dim in mem_level.served_dimensions:
+                irrelevant_dimensions = self.layer.get_operand_irrelevant_layer_dims(layer_op) # REG_I1的W的无关维度 e.g. C B
+                for oa_dim in mem_level.served_dimensions: # REG_I1的共用维度 e.g. D1
                     # Iterate over all possible LayerDims and rescale max unroll factor
-                    for layer_dim, unrolling_size in mapping[oa_dim].items():
+                    for layer_dim, unrolling_size in mapping[oa_dim].items(): # ：K 64, C 64, OX 64, OY 64
                         # If not irrelevant, it is (partially) relevant. Limit based on BW and operand precision.
-                        if layer_dim not in irrelevant_dimensions:
-                            max_multicast_elements = mem_bandwidth // precision if precision > 0 else unrolling_size
+                        if layer_dim not in irrelevant_dimensions: #如果该X loop与W无关,则意味着相同的W serve D1阵列, X=1,X=2所用的都是同一套W，则没有利用读写带宽
+                            max_multicast_elements = mem_bandwidth // precision if precision > 0 else unrolling_size #否则让读或写带宽限制空间映射
                             if max_multicast_elements < unrolling_size:
                                 conditional_log(
                                     layer_dim,
@@ -222,7 +219,6 @@ class SpatialMappingGeneratorStage(Stage):
 
     def limit_unrolling_to_mem_capacity(self, mapping: SpatialMapping) -> SpatialMapping:
         """! Scale the given unroll factors such that they do not exceed the capacity of the memory structure"""
-
         def limit_loop_unrolling(
             spatial_mapping: SpatialMapping, dims_to_limit: set[LayerDim], max_unrolling: float
         ) -> SpatialMapping:
@@ -270,6 +266,7 @@ class SpatialMappingGeneratorStage(Stage):
                 total_unrolling_size = 1
                 relevant_oa_dims_spatial_mapping = SpatialMapping({})
                 non_irrelevant_dimensions: set[LayerDim] = set()
+
                 for oa_dim in mem_level.served_dimensions:
                     relevant_oa_dims_spatial_mapping[oa_dim] = mapping[oa_dim]
                     # Iterate over all possible LayerDims and rescale max unroll factor
@@ -306,7 +303,6 @@ class SpatialMappingGeneratorStage(Stage):
             }
             for oa_dim in self.oa_dim_sizes
         }
-
         max_unrolling = self.limit_unrolling_to_mem_bandwidth(max_unrolling)
         return max_unrolling
 
@@ -325,7 +321,7 @@ class SpatialMappingGeneratorStage(Stage):
             if layer_dim in max_unrollings.keys():
                 max_factor: UnrollFactor = int(max_unrollings[layer_dim])
                 # Start with largest unrollings
-                for factor in sorted(divisors(max_factor), reverse=True):
+                for factor in sorted(divisors(max_factor), reverse=True): # 生成64 32 16...类似的约分数，可能能效最优
                     yield MappingSingleOADim({layer_dim: factor})
 
         if self.enable_mix_spatial_mapping_generation:
@@ -655,7 +651,6 @@ class SpatialMappingGeneratorStage(Stage):
         # to avoid the MemoryTooSmallException in loma stage.
         innermost_levels = self.memory_hierarchy.get_inner_memories()
 
-        # check if it is weight stationary.
         # keep the spatial loop as it was if it is not weight stationary.
         if len(self.layer.constant_operands) != 1:
             return self.accelerator
@@ -676,7 +671,7 @@ class SpatialMappingGeneratorStage(Stage):
 
         # check if act is not served in the innermost memories, or it is uti-casting for act.
         # keep the spatial loop as it was if act is not served.
-        if "act_served_oa_dim" not in locals() or len(act_served_oa_dims) != 1:
+        if "act_served_oa_dim" not in locals() or len(act_served_oa_dims) != 1: #!!只考虑简单逻辑
             return self.accelerator
 
         act_served_oa_dim: OADimension = next(iter(act_served_oa_dims))

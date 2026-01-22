@@ -102,7 +102,6 @@ class LayerNodeFactory:
         memory_operand_links = mapping_factory.create_memory_operand_links()
         temporal_ordering = mapping_factory.create_temporal_ordering()
         temporal_ordering.remove_invalid_layer_dims(layer_dim_sizes, self.node_name)
-
         return MappingAttributes(
             spatial_mapping=spatial_mapping,
             spatial_mapping_hint=spatial_mapping_hint,
@@ -124,6 +123,7 @@ class LayerNodeFactory:
         loop_sizes: list[UnrollFactor] = self.node_data["loop_sizes"]
 
         data = {dim: size for dim, size in zip(loop_dims, loop_sizes)}
+        #{"K": 64, "C": 128}
         return LayerDimSizes(data)
 
     def create_operand_precision(self) -> LayerOperandPrecision:
@@ -144,7 +144,7 @@ class LayerNodeFactory:
                 coef_2=int(coef_2) if coef_2 is not None else 1,
                 coef_3=int(coef_3) if coef_3 is not None else 1,
             )
-            relations.append(layer_dim_relation)
+            relations.append(layer_dim_relation) # IX = 2*OX + 1*FX
 
         return relations
 

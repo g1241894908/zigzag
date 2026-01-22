@@ -42,7 +42,8 @@ class MemoryAllocator:
         self.layer = layer
         self.spatial_mapping = spatial_mapping
         self.ordering = ordering
-
+        # print(accelerator.memory_hierarchy.mem_level_list)
+        # exit()
         # Initialize operands (having local copies speeds up the code)
         self.layer_and_mem_ops = self.layer.memory_operand_links.layer_and_mem_ops()
         self.layer_ops = [layer_op for layer_op, _ in self.layer_and_mem_ops]
@@ -64,7 +65,9 @@ class MemoryAllocator:
             self.allocated[mem_op] = [
                 Loop(dim, size, "spatial") for (dim, size) in self.spatial_mapping.get_unrolling(op=layer_op, level=0)
             ]
-
+        #{O: [SpatialLoop(C,3.0)], I2: [], I1: [SpatialLoop(K,16.0)]}
+        # print(self.allocated)
+        # exit()
         # Initialize the level of memory hierarchy for each layer operand at 1 (first memory level).
         # This information is required to fetch the correct spatial loops after we have allocated temporal loops.
         self.mem_level = {layer_op: 1 for layer_op in self.layer_ops}
@@ -84,9 +87,10 @@ class MemoryAllocator:
         # self.nodes contains the different memory nodes in bottom-up fashion
         memory_hierarchy = self.accelerator.memory_hierarchy
         top_levels = {mem_op: memory_hierarchy.get_operand_top_level(mem_op) for mem_op in self.mem_ops}
+
         for node in memory_hierarchy.topological_sort():
             self.allocate_node(node, top_levels)
-
+        # exit()# !!
         # After all the nodes have been allocated, we can create the TemporalMapping
         # object from the dictionary we have built
         temporal_mapping = TemporalMapping(self.temporal_mapping_dict, self.layer)
@@ -101,14 +105,18 @@ class MemoryAllocator:
         """
 
         # Select the mem operands that are required for this layer (e.g. pooling has no weights so one mem
-        # op less)
-        filtered_mem_ops = [op for op in node.operands if op in self.mem_ops]
-        # Get the capacity of this memory node (in bits)
-        mem_capacity = node.memory_instance.size
+        # op less) 从最底层的内存开始找，并把它serve的操作数放到filtered_mem_ops
+        filtered_mem_ops = [op for op in node.operands if op in self.mem_ops]  #[I2, I1]
 
+        # Get the capacity of this memory node (in bits)
+        # 单个reg的存储，不包含硬件的空间展开
+        mem_capacity = node.memory_instance.size
+        #print(mem_capacity)#!!
+        
         # For all the mem_ops, find the max amount of unallocated loops we could allocate
         all_sizes = {mem_op: self.calc_size_slices(mem_op, mem_capacity) for mem_op in filtered_mem_ops}
-
+        # 这需要知道不同操作数再这个层级的可分配的循环，如果非共享就直接分配了，如果共享就要开始找最优
+        
         # Now that we have this for all the mem_ops, call function that finds the best
         # combination of loops to minimize the number of accesses to the level above
         best_loop_idxs = self.find_best_loop_combination(filtered_mem_ops, all_sizes, node, top_levels)
@@ -183,7 +191,6 @@ class MemoryAllocator:
         unallocated_loops = self.unallocated[mem_op]
         sizes: list[UnrollFactor] = []
         precision = self.get_precision(mem_op, layer_op, unallocated_loops)
-
         # If this memory supports double buffering get the size it would take to allocate everything
         if db_support:
             all_loops = allocated_loops + unallocated_loops[: len(unallocated_loops) + 1]
@@ -194,6 +201,7 @@ class MemoryAllocator:
             unallocated_slice = unallocated_loops[:i]
             loops = allocated_loops + unallocated_slice
             size = self.calc_loops_size(loops, layer_op, precision)
+
             # double size allocated if the node uses double buffering
             if db_support:
                 if len(unallocated_loops[i:]) > 0 and size < all_loops_size:  # type: ignore

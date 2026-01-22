@@ -35,6 +35,7 @@ class CompleteSaveStage(Stage):
         substage = self.list_of_callables[0](self.list_of_callables[1:], **self.kwargs)
 
         for cme, extra_info in substage.run():
+
             if isinstance(cme, CumulativeCME):
                 json_filename = self.dump_folder + "/overall_complete.json"
             elif isinstance(cme, CostModelEvaluation):
@@ -138,7 +139,6 @@ class PickleSaveStage(Stage):
         for cme, extra_info in substage.run():
             all_cmes: list[CostModelEvaluationABC] = [cme for (cme, _) in extra_info]
             yield cme, extra_info
-
         # After we have received all the CMEs, save them to the specified output location.
         dirname = os.path.dirname(self.pickle_filename)
         if not os.path.exists(dirname):

@@ -20,24 +20,35 @@ class SpatialMappingInternal:
 
         # Extract architecture level count for each operand from spatial mapping definition, starting from MAC level
         self.arch_level = {op: len(spatial_mapping) for op, spatial_mapping in spatial_mapping_dict.items()}
-
+        # 层级个数mac -> reg -> sram -> dram
         # Calculate unrolled loop size for different loop types (r/ir/total)
         self.calc_unroll_size()
+        # unroll_size_r {O: [1  , 16.0, 1, 1], W: [1, 48.0, 1, 1], I: [1   , 3.0, 1, 1]}
+        # unroll_size_ir{O: [3.0, 1   , 1, 1], W: [1, 1   , 1, 1], I: [16.0, 1  , 1, 1]}
+        # unroll_size_total{O: [3.0, 16.0, 1, 1], W: [1, 48.0, 1, 1], I: [16.0, 3.0, 1, 1]}
 
         # Calculate total/unique/duplicate unit count
         self.calc_unit_count()
+        #unit_count:{O: [48, 16, 1, 1], W: [48, 48, 1, 1], I: [48, 3, 1, 1]} 最里层是PE个数
+        #unit_unique：{O: [16.0, 16.0, 1, 1], W: [48.0, 48.0, 1, 1], I: [3.0, 3.0, 1, 1]}
+        #unit_duplicate ：[3.0, 1, 1, 1], W: [1, 1, 1, 1], I: [16.0, 1, 1, 1]}
 
         # Calculate data serve scope: each data element serves/(is served by) how many unit at below level
         # NOTE: data_serve_scope doesn't include MAC level, thus is one level less than other spatial mapping
         # attributes.
         self.calc_data_serve_scope()
-
+        # data_serve_scope : reg上每个数据会被多少个PE复用
+        # {O: [3.0, 1.0, 1.0], W: [1.0, 1.0, 1.0], I: [16.0, 1.0, 1.0]}
+      
         # Calculate memory bandwidth incremental factor between architectural levels
         # mem_bw_boost_factor doesn't include MAC level, thus is one level less than other spatial mapping attributes.
         self.calc_mem_bw_boost_factor()
+        # 上一级sram需要多大的boost因子，比如W就需要48个reg同时填满，I只需要填三个reg,O就需要填16个reg
+        # {O: [1, 16, 1], W: [1, 48, 1], I: [1, 3, 1]}
 
         # Added for loma: Get list of the spatially unrolled loops, without any information about arch levels
         self.save_spatial_loop_dim_size()
+        # [(C, 3.0), (K, 16.0)]
 
     def __str__(self):
         return f"SpatialMapping({self.mapping_dict_origin})"

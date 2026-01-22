@@ -25,10 +25,10 @@ from zigzag.stages.workload_iterator import WorkloadStage
 
 
 def get_hardware_performance_zigzag(
-    workload: str | ModelProto,
+    workload: str | ModelProto, # 这个参数既可以是str又可以是ModelProto(ONNX数据格式)
     accelerator: str,
     mapping: str,
-    *,
+    *,    # 星号之后的参数只能显示指定
     temporal_mapping_search_engine: Literal["loma"] | Literal["salsa"] = "loma",
     opt: str = "latency",
     dump_folder: str = f"outputs/{datetime.now()}",
@@ -75,7 +75,7 @@ def get_hardware_performance_zigzag(
             raise NotImplementedError("Optimization criterion 'opt' should be either 'energy' or 'latency' or 'EDP'.")
 
     # Check workload format and based on it select the correct workload parser stage
-    workload_parser_stage = (
+    workload_parser_stage = (  # 二选一的stage解析
         ONNXModelParserStage
         if isinstance(workload, ModelProto) or (workload.split(".")[-1] == "onnx")
         else WorkloadParserStage
@@ -93,7 +93,7 @@ def get_hardware_performance_zigzag(
         workload_parser_stage,
         # Parse the accelerator module/passthrough given accelerator
         AcceleratorParserStage,
-        # Save the summed CME energy and latency to a json
+        # Save the summed CME energy and latency to a json  # CME就是cost model evaluation
         SimpleSaveStage,
         # Save all received CMEs in a list to a pickle file
         PickleSaveStage,
@@ -103,7 +103,7 @@ def get_hardware_performance_zigzag(
         SearchInterLayerDataLocalityStage if do_exploint_inter_layer_locality else None,
         # Iterate through the different layers in the workload
         WorkloadStage,
-        # Save the chosen loop ordering and memory hierarchy
+        # Save the chosen loop ordering for every layer and memory hierarchy
         VisualizationStage,
         # Remove unused memories
         ExploitInterLayerDataLocalityStage if do_exploint_inter_layer_locality else None,
@@ -121,8 +121,8 @@ def get_hardware_performance_zigzag(
         CostModelStage,
     ]
 
-    stage_callables: list[StageCallable] = [s for s in stages if s is not None]
-
+    stage_callables: list[StageCallable] = [s for s in stages if s is not None]  #去掉None，将剩下的可调用对象（带配置的类，里面有个run的方法可以调用内部函数）放在一个list里面
+    
     # Initialize the MainStage as entry point
     mainstage = MainStage(
         list_of_callables=stage_callables,
@@ -159,3 +159,10 @@ def get_hardware_performance_zigzag_imc(
 ) -> tuple[float, float, float, float, list[tuple[CostModelEvaluationABC, Any]]]:
     """Overload with type hint"""
     return get_hardware_performance_zigzag(*args, in_memory_compute=True)  # type: ignore
+
+
+# complex_data = (
+#     "Level_1",          # 索引 0
+#     (100, 200),         # 索引 1 (这是一个元组)
+#     ["A", "B", "C"]     # 索引 2 (这是一个列表)
+# )

@@ -21,37 +21,37 @@ logger = logging.getLogger(__name__)
 class ONNXModelParser:
     """! Parses the ONNX model into a workload."""
 
-    # Map the node's op_type to the corresponding Parser class
-    PARSER_MAPPING: dict[str, Type[ONNXOperatorParser]] = {
-        "QLinearConv": ConvParser,
-        "Conv": ConvParser,
-        "MatMul": MatMulParser,
-        "Gemm": GemmParser,
+#   (1) 自定义内部变量名            (2) 类型 Hint (标签)                (3) 具体数值 (真值)
+#      ↓↓↓                     ↓↓↓                               ↓↓↓
+    PARSER_MAPPING: dict[str, Type[ONNXOperatorParser]] = {  "QLinearConv"  : ConvParser,
+                                                             "Conv"         : ConvParser, 
+                                                             "MatMul"       : MatMulParser,
+                                                             "Gemm"         : GemmParser,
     }
 
-    def __init__(self, onnx_model: str | ModelProto, mapping_yaml_path: str) -> None:
+    def __init__(self, onnx_model: str | ModelProto, mapping_yaml_path: str) -> None: # 构造的时候就分析模型，准备转换onnx格式
         assert isinstance(onnx_model, (str, ModelProto)), f"Given onnx_model is of type {type(onnx_model)}."
         assert isinstance(mapping_yaml_path, str) and mapping_yaml_path.split(".")[-1] == "yaml"
 
         if isinstance(onnx_model, str):
-            self.onnx_model: ModelProto = parse_onnx_model_from_path(onnx_model)
+            self.onnx_model: ModelProto = parse_onnx_model_from_path(onnx_model) # 直接给 .onnx 文件路径 → 用 parse_onnx_model_from_path 读成 ModelProto 
         else:
             self.onnx_model = onnx_model
-
         self.workload = None
-        self.mapping_yaml_path = mapping_yaml_path
+        self.mapping_yaml_path = mapping_yaml_path #存下mapping路径
 
-    def run(self) -> ONNXWorkload:
+    def run(self) -> ONNXWorkload: #真正开始转换格式
         """! Iterate through the onnx model and generate the workload consisting of LayerNodes and DummyNodes"""
 
         assert self.onnx_model is not None
-        self.onnx_model = parse_dynamic_onnx_model(self.onnx_model)
+        self.onnx_model = parse_dynamic_onnx_model(self.onnx_model) # 删除IF分支节点，不能生成动态分析图，分成两种负载去分析
+
         self.mapping_data = WorkloadParserStage.parse_mapping_data(self.mapping_yaml_path)
 
         return self.parse_workload_from_onnx_model_and_mapping()
 
     def get_parser_class(self, node: NodeProto):
-        parser_class = ONNXModelParser.PARSER_MAPPING.get(node.op_type)
+        parser_class = ONNXModelParser.PARSER_MAPPING.get(node.op_type)  # 根据算子名字启用不同的parser
         if not parser_class:
             return DefaultNodeParser
         return parser_class
@@ -86,7 +86,7 @@ class ONNXModelParser:
         for node_id, node in enumerate(self.onnx_model.graph.node):  # type: ignore
             nodes_inputs[node_id] = node.input
             nodes_outputs[node_id] = node.output
-
+            
             parser_class = self.get_parser_class(node)
             parser = parser_class(
                 node_id=node_id,
@@ -99,11 +99,13 @@ class ONNXModelParser:
             node_obj = parser.run()
             # Add the node_obj to the ONNXWorkload
             workload.add(node_id, node_obj)
-
         logger.info(
-            "Created ONNXWorkload graph with %i nodes and %i edges.",
+            "Created ONNXWorkload graph with %i nodes and %i edgesp.",
             workload.number_of_nodes(),
             workload.number_of_edges(),  # type: ignore
         )
-
+        # from pprint import pprint
+        # target_node = workload.node_id_to_obj[0]
+        # print(node_obj.input_operand_source.values())
+        # exit()
         return workload

@@ -27,7 +27,6 @@ class AcceleratorParserStage(Stage):
     @staticmethod
     def parse_accelerator(accelerator_yaml_path: str) -> Accelerator:
         accelerator_data = open_yaml(accelerator_yaml_path)
-
         validator = AcceleratorValidator(accelerator_data)
         accelerator_data = validator.normalized_data
         validate_success = validator.validate()
@@ -35,4 +34,6 @@ class AcceleratorParserStage(Stage):
             raise ValueError("Failed to validate user provided accelerator.")
 
         factory = AcceleratorFactory(accelerator_data)
+        # print(accelerator_data["memories"])
+        # exit()
         return factory.create()

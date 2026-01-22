@@ -143,4 +143,4 @@ class SumStage(Stage):
             assert isinstance(cme, CostModelEvaluation)
             total_cme += cme
             all_cmes.append((cme, extra_info))
-        yield total_cme, all_cmes
+        yield total_cme, all_cmes # 在当前函数内部出现yield就会变成生成器

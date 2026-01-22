@@ -4,7 +4,7 @@ from typing import Any, Iterator
 from zigzag.utils import json_repr_handler
 
 
-class LayerAttribute(metaclass=ABCMeta):
+class LayerAttribute(metaclass=ABCMeta): # ABCMeta只是一个元类,防止人们忘记写initial不必深究
     """! Abstract Base Class to represent any layer attribute"""
 
     @abstractmethod

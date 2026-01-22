@@ -75,8 +75,8 @@ class LomaEngine:
         # TODO: thus adapt the memory hierarchy.
         # TODO: The fact that there is a global buffer above the cores requires attention.
         self.memory_hierarchy = accelerator.memory_hierarchy
-
         self.show_progress_bar = kwargs.get("loma_show_progress_bar", False)
+
 
     def set_constraints(self, constraints: list[PermutationConstraint]) -> None:
         self.constraints = constraints
@@ -88,7 +88,12 @@ class LomaEngine:
         """
         # TODO: add the criterion(s) as inputs to this function.
         self.temporal_loop_dim_size = self.get_temporal_loops()  # get all the temporal loops to be scheduled
+
         self.update_min_lpf_factor(self.temporal_loop_dim_size)
+        # print(self.lpf_limit)
+        # print(self.temporal_loop_dim_size)
+        # exit()
+
         self.get_prime_factors()  # convert these to LPFs (loop prime factors)
 
         pbar = tqdm(total=self.nb_permutations) if self.show_progress_bar else None
@@ -126,7 +131,8 @@ class LomaEngine:
         """! Get all loops that have to be temporally scheduled given layer and spatial mapping.
         # TODO clean up (and make use of `LayerDimSizes` methods)
         """
-        layer_dim_sizes = self.layer.layer_dim_sizes.copy()  # init with all loop sizes
+        layer_dim_sizes = self.layer.layer_dim_sizes.copy()  # 得到该层的循环维度
+
         for (
             spatial_loop_dim,
             spatial_loop_size,
@@ -186,7 +192,6 @@ class LomaEngine:
             temporal_loop_pfs[tl_dim] = tuple(pfs)  # type: ignore
             temporal_loop_pf_counts[tl_dim] = tuple(counts)  # type: ignore
             temporal_loop_pf_count_sums[tl_dim] = sum(counts)  # type: ignore
-
         # If there are no temporal LPFs generated, i.e. all loops are unrolled spatially,
         # we manually insert a loop of size 1
         if not lpfs:

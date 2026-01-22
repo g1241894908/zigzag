@@ -51,7 +51,6 @@ class SpatialMappingConversionStage(Stage):
 
     def run(self):
         spatial_mapping, spatial_mapping_int = self.convert_user_spatial_mapping(self.user_spatial_mapping)
-
         kwargs = self.kwargs.copy()
         kwargs["spatial_mapping"] = spatial_mapping
         kwargs["spatial_mapping_int"] = spatial_mapping_int
@@ -179,7 +178,7 @@ class SpatialMappingConversionStage(Stage):
                 loop_dim_unrolled=layer_dim,
                 user_spatial_mapping=limited_user_spatial_mapping,
             )
-            temporal_remainder = int(math.ceil(layer_dim_size / (unroll_factor * loop_size_unrolled_on_early_oa_dims)))
+            temporal_remainder = int(math.ceil(layer_dim_size / (unroll_factor * loop_size_unrolled_on_early_oa_dims))) # 用来计算PE利用率的
             unroll_factor_remainder = layer_dim_size / temporal_remainder / loop_size_unrolled_on_early_oa_dims
             unroll_factor_new: int | float = (
                 unroll_factor_remainder if allow_decimal_sm_loop_size else int(unroll_factor_remainder)
@@ -196,30 +195,31 @@ class SpatialMappingConversionStage(Stage):
         """
         mapping_per_mem_lvl: SpatialMappingPerMemLvl = {}
         mem_hierarchy = self.accelerator.memory_hierarchy
-        for layer_op in self.memory_operand_links.layer_operands:
-            mem_op = self.memory_operand_links.layer_to_mem_op(layer_op)
-            usm_copy = user_spatial_mapping.copy()
-            mapping_per_mem_lvl[layer_op] = []
+        for layer_op in self.memory_operand_links.layer_operands: # 遍历memory操作数O I1 I2
+            mem_op = self.memory_operand_links.layer_to_mem_op(layer_op) # 遍历实际操作数O W I
+            usm_copy = user_spatial_mapping.copy()    # usm_copy = {D1: {C: 3}, D2: {K: 16}}
+            mapping_per_mem_lvl[layer_op] = []        # {'W':[]}
             memory_levels = mem_hierarchy.get_memory_levels(mem_op)
 
-            for memory_level in memory_levels:
+            for memory_level in memory_levels:  # 第一轮 memory_level = RF
                 spatial_mapping_lvl: list[tuple[LayerDim, UnrollFactor]] = []
                 spatial_mapping_lvl_dict: dict[LayerDim, UnrollFactor] = {}
                 served_dimensions = memory_level.served_dimensions
-                for oa_dim in served_dimensions:
+                for oa_dim in served_dimensions: # oa_dim = D1
                     if oa_dim in usm_copy:
                         # The dimension name is present in the user defined spatial mapping
                         # Add the spatial loop of this dimension to the spatial mapping
-                        spatial_loop = usm_copy[oa_dim]
+                        spatial_loop = usm_copy[oa_dim]  #拿到{C: 3}
                         for layer_dim, unrolling in spatial_loop.items():
                             if layer_dim in spatial_mapping_lvl_dict:
                                 spatial_mapping_lvl_dict[layer_dim] *= unrolling
                             else:
-                                spatial_mapping_lvl_dict[layer_dim] = unrolling
+                                spatial_mapping_lvl_dict[layer_dim] = unrolling  # 第一次登记：C在RF对于W展开了3次循环
 
                         # Then remove this dim_name and spatial loop key value pair from the dict
+                        # Then remove this dim_name and spatial loop key value pair from the dict
                         # as the spatial mapping representation is a level-by-level one.
-                        del usm_copy.data[oa_dim]
+                        del usm_copy.data[oa_dim]  # 重点！把 D1 拿走。此时 usm_copy 只剩 {D2: {K: 16}}
                 for combination in spatial_mapping_lvl_dict.items():
                     spatial_mapping_lvl.append(combination)
                 mapping_per_mem_lvl[layer_op].append(spatial_mapping_lvl)

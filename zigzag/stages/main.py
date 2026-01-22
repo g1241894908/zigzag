@@ -15,6 +15,17 @@ class MainStage:
 
     def run(self):
         answers: list[tuple[CostModelEvaluationABC, Any]] = []
+        ##
+        """# 1. 取出类（工厂）
+        StageClass = self.list_of_callables[0] 
+        
+        # 2. 实例化（创建对象，分配内存）
+        # 注意：在 Python 中，类名后面加括号就是在实例化！
+        stage_obj = StageClass(self.list_of_callables[1:], **self.kwargs)
+        
+        # 3. 调用函数
+        generator = stage_obj.run()"""
+        ##
         for cme, extra_info in self.list_of_callables[0](self.list_of_callables[1:], **self.kwargs).run():
             answers.append((cme, extra_info))
         return answers

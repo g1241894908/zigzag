@@ -80,7 +80,8 @@ class MappingSingleOADim:
 class SpatialMapping(LayerAttribute):
     """! Spatial unrollings defined for every operational array dimension"""
 
-    def __init__(self, data: dict[OADimension, MappingSingleOADim]):
+    def __init__(self, data: dict[OADimension, MappingSingleOADim]):  # 字典的key是OADimension,代表具体哪个维度 字典的value是MappingSingleOADim,代表哪个循环在这个维度上
+                                                                      # !! e.g. OADimension("D2"): MappingSingleOADim({LayerDim("C"): 2}
         self.data = data
         self.oa_dim_sizes: dict[OADimension, int] | None = None
 
@@ -246,7 +247,7 @@ class SpatialMapping(LayerAttribute):
         unrolling_per_layer_dim = [self.get_total_unrolling_of_layer_dim(dim) for dim in self.all_contained_layer_dims]
         diversity_indicator = hw_utilization / max(unrolling_per_layer_dim) - 1
         assert diversity_indicator < hw_utilization, "error in the performance indicator formula"
-        return hw_utilization + diversity_indicator
+        return hw_utilization + diversity_indicator # 就是阵列计算不同的，分数越高
 
     def flatten_unrollings(self) -> list[tuple[LayerDim, UnrollFactor]]:
         """! Convert all unrollings (pair of LayerDim and UnrollFactor) at all OADimension to a single

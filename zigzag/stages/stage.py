@@ -31,7 +31,7 @@ class Stage(metaclass=ABCMeta):
             )
 
     @abstractmethod
-    def run(self) -> Generator[tuple[CostModelEvaluationABC, Any], None, None]: ...
+    def run(self) -> Generator[tuple[CostModelEvaluationABC, Any], None, None]: ...  #输出的cme的信息是一个类似于结构体包含很多信息的
 
     def __iter__(self):
         return self.run()

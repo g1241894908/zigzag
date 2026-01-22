@@ -60,7 +60,7 @@ class Accelerator:
         self.mem_size_dict = {}
         self.mem_r_bw_dict = {}
         self.mem_w_bw_dict = {}
-        self.mem_r_bw_min_dict = {}
+        self.mem_r_bw_min_dict = {} # 最小读入单位
         self.mem_w_bw_min_dict = {}
         for mem_op in mem_operands:
             self.mem_hierarchy_dict[mem_op] = [

@@ -80,7 +80,7 @@ class CostModelEvaluationABC(metaclass=ABCMeta):
                 list_temp += breakdown_other[breakdown_len:]
                 result.mem_energy_breakdown[layer_op] = list_temp
 
-        for layer_op, breakdown_this in self.mem_energy_breakdown_further.items():
+        for layer_op, breakdown_this in self.mem_energy_breakdown_further.items(): #包含更多方向的,每个DTL单独的读写分开的
             if layer_op in other.mem_energy_breakdown_further.keys():
                 breakdown_other = other.mem_energy_breakdown_further[layer_op]
                 list_temp2: list[AccessEnergy] = []

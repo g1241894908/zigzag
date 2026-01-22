@@ -22,10 +22,10 @@ class ONNXModelParserStage(Stage):
         self.onnx_model_parser = ONNXModelParser(workload, mapping)
 
     def run(self):
-        workload = self.onnx_model_parser.run()
-        onnx_model = self.onnx_model_parser.onnx_model
+        workload = self.onnx_model_parser.run() # 这里会把ONNX模型解析成OnnxWorkLoad图 同样也加上了mapping的信息
 
-        sub_stage = self.list_of_callables[0](
+        onnx_model = self.onnx_model_parser.onnx_model  # 原始解析的onnx_model
+        sub_stage = self.list_of_callables[0]( #!!
             self.list_of_callables[1:],
             onnx_model=onnx_model,
             workload=workload,

@@ -34,7 +34,7 @@ class ONNXOperatorParser(metaclass=ABCMeta):
         self.accelerator = accelerator
 
     @abstractmethod
-    def run(self) -> LayerNodeABC: ...
+    def run(self) -> LayerNodeABC: ... # 定义执行完这个程序必须返回一个LayerNodeABC规范的类
 
     def get_input_output_weight_data_type(self):
         """! Return the data type of the input, output and weight tensors of this node."""
@@ -62,7 +62,7 @@ class ONNXOperatorParser(metaclass=ABCMeta):
                     f"Retrieving weight name for onnx node of type {node.op_type} is not supported."
                 )
 
-    def get_node_predecessors(self) -> list[int]:
+    def get_node_predecessors(self) -> list[int]:  #确定上游数据是啥
         """Compute node input sources"""
         predecessors: list[int] = []
         for node_input in self.node.input:
