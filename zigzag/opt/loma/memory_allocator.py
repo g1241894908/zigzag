@@ -111,7 +111,10 @@ class MemoryAllocator:
         mem_capacity = node.memory_instance.size
 
         # For all the mem_ops, find the max amount of unallocated loops we could allocate
-        all_sizes = {mem_op: self.calc_size_slices(mem_op, mem_capacity) for mem_op in filtered_mem_ops}
+        all_sizes = {
+            mem_op: self.calc_size_slices(mem_op, mem_capacity, node.memory_instance.force_double_buffering)
+            for mem_op in filtered_mem_ops
+        }
 
         # Now that we have this for all the mem_ops, call function that finds the best
         # combination of loops to minimize the number of accesses to the level above

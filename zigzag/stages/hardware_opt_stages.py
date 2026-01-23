@@ -35,7 +35,7 @@ class HardwareOptimizerStage(Stage):
         self.output_path = self.kwargs.get("dump_folder", "./")
 
         # Define different l1 memory sizes and gemmx array sizes to try
-        self.l1_memory_sizes = [32, 64, 128, 256, 512]  # KiB
+        self.l1_memory_sizes = [128]  # KiB
         self.l1_memory_sizes_read_costs = {
             32: 95,
             64: 104,
@@ -52,7 +52,8 @@ class HardwareOptimizerStage(Stage):
         sub_list_of_callables = self.list_of_callables[1:]
         all_cmes: list[CostModelEvaluationABC] = []
         best_cme: CostModelEvaluationABC | None = None
-        for accelerator_path, workload in self._accelerator_and_workload_iterator():
+        best_idx = None
+        for accelerator_path, workload, i in self._accelerator_and_workload_iterator():
             logger.info(f"Evaluating hardware configuration: {accelerator_path}")
             substage = self.list_of_callables[0](
                 sub_list_of_callables,
@@ -61,7 +62,8 @@ class HardwareOptimizerStage(Stage):
                 **self.kwargs,
             )
 
-            for cme, _ in substage.run():
+            for cumulative_cme, extra_info in substage.run():
+                cme = extra_info[0][0]
                 assert isinstance(cme, CostModelEvaluationABC)
                 if (
                     best_cme is None
@@ -69,13 +71,20 @@ class HardwareOptimizerStage(Stage):
                     or (cme.latency_total2 == best_cme.latency_total2 and cme.energy_total < best_cme.energy_total)
                 ):
                     best_cme = cme
+                    best_idx = i
                 all_cmes.append(cme)
+
+            assert best_cme is not None
+            assert best_idx is not None
+            print(
+                f"Finished architecture {i}. Optimal latency so far: {best_cme.latency_total2} cycles for architecture {best_idx}."
+            )
 
         self._plot_cme_distributions(all_cmes, best_cme)
         assert best_cme is not None
-        yield best_cme, [(best_cme, None)]
+        yield best_cme, [(best_cme, best_idx)]
 
-    def _accelerator_and_workload_iterator(self) -> list[tuple[str, DNNWorkload]]:
+    def _accelerator_and_workload_iterator(self) -> list[tuple[str, DNNWorkload, int]]:
         """Iterate through different hardware configurations and update the workload spatial unrolling."""
         # First, assert that the accelerator yaml name is gemm_l1_l3
         assert "gemm_l1_l3" in self.accelerator, "HardwareOptimizerStage only supports gemm_l1_l3 accelerator."
@@ -101,8 +110,8 @@ class HardwareOptimizerStage(Stage):
                 modified_accel_path = f"{self.output_path}/gemm_l1_l3_{i}.yaml"
                 with open(modified_accel_path, "w", encoding="UTF-8") as f:
                     yaml.dump(accel_yaml_modified, f, sort_keys=False)
+                yield modified_accel_path, self.workload, i
                 i += 1
-                yield modified_accel_path, self.workload
 
     def _update_l1_size_in_yaml(self, accel_yaml: dict[str, Any], l1_size: int) -> dict[str, Any]:
         """Update the l1 memory size in the accelerator yaml dictionary."""
