@@ -463,6 +463,8 @@ class Mapping:
                 + self.temporal_mapping.cycle_cabl_level[op]
                 for op in self.layer_node.input_operands
             }
+            # {W: [12544, 12544, 2458624, 2458624], I: [1, 1, 50176, 2458624]}
+
             # For output operands, add operational array level's 1 cycle in the below to align with the list length of
             # data_each_level
             cycle_each_level[self.layer_node.output_operand] = [1] + self.temporal_mapping.cycle_cabl_level[
@@ -475,6 +477,7 @@ class Mapping:
         # Add the mem BW boost factor 1 on the top (the memory BW boost factor from outside to top memory)
         # to align with the list length of data_each_level
         mem_bw_boost_factor = {op: self.spatial_mapping.mem_bw_boost[op] + [1] for op in self.operand_list}
+        # {O: [1, 16, 1, 1], W: [1, 48, 1, 1], I: [1, 3, 1, 1]} # 看起来和reg实体并行有关
 
         # req_mem_bw_raw doesn't distinguish read and write, doesn't distinguish input operands from output operand
         # "_L/_H" indicates for each data transfer link (DTL), the lower/higher memory level's required BW,
@@ -482,7 +485,7 @@ class Mapping:
         # each Weight Reg File's required write BW is indicated by "_L",
         # while Global Buffer (Weight)'s required read BW is indicate by "_H"
         # The unit of these variables is bits per cycle
-        req_mem_bw_low_raw = {
+        req_mem_bw_low_raw = { # 内存带宽需求  关于_L和_H的理解，分别表示上游和下游的内存带宽需求
             op: [
                 data_each_level_unrolled[op][lv] * self.data_precision_dict[op][lv] / cycle_each_level[op][lv]
                 for lv in range(self.spatial_mapping.arch_level[op])
@@ -515,6 +518,7 @@ class Mapping:
                     wr_in_by_high_bw,
                 )
                 # data transfer period
+
                 rd_out_to_low_pd = int(cycle_each_level[operand][mem_level])
                 wr_in_by_low_pd = 0
                 rd_out_to_high_pd = 0
@@ -527,7 +531,7 @@ class Mapping:
                 )
                 # data transfer period count
                 rd_out_to_low_pc = int(self.temporal_mapping.total_cycle // cycle_each_level[operand][mem_level])
-                wr_in_by_low_pc = 0
+                wr_in_by_low_pc = 0    # 假设运行完需要200个周期，这一层需要驻留100个周期，那么相当于需要200/100=2次数据传输
                 rd_out_to_high_pc = 0
                 wr_in_by_high_pc = int(self.temporal_mapping.total_cycle // cycle_each_level[operand][mem_level + 1])
                 self.unit_mem_data_movement[operand][mem_level].set_data_trans_period_count(

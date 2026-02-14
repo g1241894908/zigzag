@@ -358,7 +358,7 @@ class CostModelEvaluation(CostModelEvaluationABC):
         self.calc_energy()
         self.calc_latency()
 
-    @lru_cache(maxsize=512)
+    @lru_cache(maxsize=512) # 做了cache快速查表
     def __get_shared_mem_list(
         self,
         mem_op: MemoryOperand,
@@ -432,14 +432,13 @@ class CostModelEvaluation(CostModelEvaluationABC):
             for mem_lv in range(self.active_mem_level[layer_op]):
                 mem_utilization["individual"][layer_op].append(
                     self.mapping.data_bit_per_level_unrolled[layer_op][mem_lv + 1] / self.mem_size_dict[mem_op][mem_lv]
-                )
+                ) # 这一层需要驻留的数据量 / 这一层的内存大小（ps：计算层级和内存层级错位的）
                 effective_mem_utilization["individual"][layer_op].append(
                     self.mapping.effective_data_bit[layer_op][mem_lv + 1] / self.mem_size_dict[mem_op][mem_lv]
                 )
 
         mem_utili_shared = pickle_deepcopy(mem_utilization["individual"])
         effective_mem_utilization_shared = pickle_deepcopy(effective_mem_utilization["individual"])
-
         for mem_share_dict in self.mem_sharing_tuple:
             mem_utilization_sum = sum(
                 mem_utilization["individual"][self.memory_operand_links.mem_to_layer_op(mem_op)][mem_lv]
@@ -470,8 +469,8 @@ class CostModelEvaluation(CostModelEvaluationABC):
             mem_op = self.memory_operand_links.layer_to_mem_op(layer_op)
             for mem_lv in range(self.mapping.mem_level[layer_op]):
                 data_elem_move = self.mapping.unit_mem_data_movement[layer_op][mem_lv]
-                max_bw = self.mem_w_bw_dict[mem_op][mem_lv]
-                min_bw = self.mem_w_bw_min_dict[mem_op][mem_lv]
+                max_bw = self.mem_w_bw_dict[mem_op][mem_lv]  # 一个周期内最大能搬运的总Bit数
+                min_bw = self.mem_w_bw_min_dict[mem_op][mem_lv]  # 一个周期内最小能搬运的总Bit数 比如有mask，就可以访问部分
 
                 wr_in_by_low = self._calc_memory_access(
                     data_elem_move.data_trans_amount_per_period.wr_in_by_low,
@@ -633,10 +632,14 @@ class CostModelEvaluation(CostModelEvaluationABC):
         (minimal memory BW requirement case) by comparing the physical memory size with the effective
         data size, taking into account the memory sharing between operands.
         """
+        # print(self.effective_mem_utili_individual)
+        # print(self.effective_mem_utili_shared)
+        # exit()
         double_buffer_true: dict[LayerOperand, list[bool]] = {}
         for layer_op in self.layer.layer_operands:
             mem_op = self.memory_operand_links.layer_to_mem_op(layer_op)
             # start with False for each operand at the lowest arch level (MAC array level)
+            # MAC级别的相关循环是空间展开的，并不具备时间展开的双缓冲条件
             double_buffer_true[layer_op] = [False]
             for mem_lv in range(0, self.mapping_int.mem_level[layer_op]):
                 if self.effective_mem_utili_shared[layer_op][mem_lv] <= 0.5:
@@ -676,6 +679,8 @@ class CostModelEvaluation(CostModelEvaluationABC):
             mem_op = self.memory_operand_links.layer_to_mem_op(layer_op)
             for mem_lv in range(self.mapping_int.mem_level[layer_op]):
                 #  wr_in_by_low & rd_out_to_low
+                # data_trans_period 代表的是分割好的一次数据块驻留时间（1、double buffer，驻留时间=载入时间）
+                #                                                   (2、非double buffer，载入时间只有小窗口时间)
                 if self.double_buffer_true[layer_op][mem_lv]:
                     wr_in_by_low_allowed = self.mapping_int.unit_mem_data_movement[layer_op][
                         mem_lv
@@ -775,6 +780,7 @@ class CostModelEvaluation(CostModelEvaluationABC):
                 for mem_op, mem_lv, mov_dir in port.served_op_lv_dir:
                     if self.memory_operand_links.contains_mem_op(mem_op):
                         layer_op = self.memory_operand_links.mem_to_layer_op(mem_op)
+                        # period_count表示一共多少个数据块传输
                         period_count = self.mapping_int.unit_mem_data_movement[layer_op][
                             mem_lv
                         ].data_trans_period_count.get_single_dir_data(mov_dir)
@@ -814,6 +820,7 @@ class CostModelEvaluation(CostModelEvaluationABC):
                     stall_slack_comb_collect[idx][port_name] = port_activity[0].stall_or_slack
                     stall_slack_comb_list.append(port_activity[0].stall_or_slack)
                 elif len(port_activity) != 0:
+                    # __calc_mem_updating_window_union这个函数算的是多DTL竞争下的有效时间窗口
                     mem_updating_window_union_collect[idx][port_name] = self.__calc_mem_updating_window_union(
                         port_activity
                     )
@@ -838,7 +845,9 @@ class CostModelEvaluation(CostModelEvaluationABC):
         self.mem_updating_window_union_collect = mem_updating_window_union_collect
         self.stall_slack_comb_collect = stall_slack_comb_collect
         # Assuming all the memory ports can work in parallel
-        self.stall_slack_comb = max(stall_slack_comb_list)
+        # print(stall_slack_comb_list)
+        # exit()
+        self.stall_slack_comb = max(stall_slack_comb_list) # 全局最堵的地方
 
     def calc_loading_single_port_period_count_1(
         self,
