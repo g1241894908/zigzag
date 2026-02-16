@@ -1098,7 +1098,6 @@ class CostModelEvaluation(CostModelEvaluationABC):
         for mem_level in self.mem_level_list:
             data_loading_per_port = {port: self.calc_loading_single_port(port) for port in mem_level.port_list}
             self.data_loading_per_mem_inst.append(data_loading_per_port)
-
         # Combine the onloading of all ports to get the data onloading cycle amount
         data_onloading_cycle = self.calc_onloading_combined()
         self.data_onloading_cycle = data_onloading_cycle
